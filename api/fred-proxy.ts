@@ -1,36 +1,30 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Set CORS headers - only allow your domain
   res.setHeader("Access-Control-Allow-Origin", "https://reecebernard.dev/");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight requests
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // Only allow GET requests
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    // Extract and validate parameters
     const { series } = req.query;
 
     if (!series || typeof series !== "string") {
       return res.status(400).json({ error: "Missing series parameter" });
     }
 
-    // Only allow specific FRED series for security
     const allowedSeries = ["MORTGAGE15US", "MORTGAGE30US"];
     if (!allowedSeries.includes(series)) {
       return res.status(400).json({ error: "Unauthorized series" });
     }
 
-    // Prepare FRED API request (last 30 days, most recent)
     const endDate = new Date().toISOString().split("T")[0];
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -38,7 +32,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const fredUrl = `https://api.stlouisfed.org/fred/series/observations?series_id=${series}&api_key=${process.env.FRED_API_KEY}&file_type=json&start_date=${startDate}&end_date=${endDate}&sort_order=desc&limit=1`;
 
-    // Proxy the request to FRED API
     const fredResponse = await fetch(fredUrl);
 
     if (!fredResponse.ok) {
@@ -47,7 +40,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const fredData = await fredResponse.json();
 
-    // Validate and return the data
     if (!fredData.observations || fredData.observations.length === 0) {
       throw new Error("No data available");
     }
@@ -59,7 +51,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error("Invalid rate data");
     }
 
-    // Return clean response
     return res.status(200).json({
       series,
       rate,
@@ -69,7 +60,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error("FRED Proxy Error:", error);
 
-    // Return fallback rates on any error
     const fallbackRates: Record<string, number> = {
       MORTGAGE15US: 6.81,
       MORTGAGE30US: 7.22,
